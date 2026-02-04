@@ -8,7 +8,10 @@
       "Bash(sips:*)",
       "WebFetch(domain:github.com)",
       "Bash(defaults read:*)",
-      "Bash(log show:*)"
+      "Bash(log show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)"
     ]
   }
 }

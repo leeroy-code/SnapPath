@@ -151,7 +151,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "# Skip LaunchAtLogin helper copy when code signing is disabled (CI builds)\nif [ \"$CODE_SIGNING_ALLOWED\" = \"NO\" ]; then\n    echo \"Skipping LaunchAtLogin helper copy (code signing disabled)\"\n    exit 0\nfi\n\"${BUILT_PRODUCTS_DIR}/LaunchAtLogin_LaunchAtLogin.bundle/Contents/Resources/copy-helper-swiftpm.sh\"";
+			shellScript = "# Skip LaunchAtLogin helper copy when code signing is disabled or ad-hoc (CI builds)\n# Ad-hoc signing (CODE_SIGN_IDENTITY=\"-\") doesn't work with LaunchAtLogin helper\nif [ \"$CODE_SIGNING_ALLOWED\" = \"NO\" ] || [ \"$CODE_SIGN_IDENTITY\" = \"-\" ] || [ -z \"$CODE_SIGN_IDENTITY\" ]; then\n    echo \"Skipping LaunchAtLogin helper copy (code signing disabled or ad-hoc)\"\n    exit 0\nfi\n\"${BUILT_PRODUCTS_DIR}/LaunchAtLogin_LaunchAtLogin.bundle/Contents/Resources/copy-helper-swiftpm.sh\"";
 		};
 /* End PBXShellScriptBuildPhase section */
 
