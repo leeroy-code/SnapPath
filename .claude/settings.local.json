@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(xcodebuild:*)",
+      "Bash(sips:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(defaults read:*)",
+      "Bash(log show:*)"
+    ]
+  }
+}
