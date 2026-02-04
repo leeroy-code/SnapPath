@@ -1,5 +1,7 @@
 # SnapPath
 
+<!-- CI Test 1 -->
+
 [中文版](README_CN.md) | English
 
 > A macOS screenshot tool designed for AI-assisted programming. Capture, save, and have the path automatically copied to your clipboard—all in one flow.
