@@ -30,7 +30,10 @@ jobs:
             -archivePath build/SnapPath.xcarchive \
             -destination "generic/platform=macOS" \
             ANY_ARCH="x86_64 arm64" \
-            SKIP_INSTALL=NO
+            SKIP_INSTALL=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: Export App
         run: |
