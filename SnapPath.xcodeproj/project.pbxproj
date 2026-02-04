@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		B0850C762F32E097009054F1 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = B0850D012F32DB00009054F1 /* KeyboardShortcuts */; };
 		B0850C772F32E097009054F1 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = B0850D032F32DB00009054F1 /* LaunchAtLogin */; };
+		B0850D112F32DB00009054F1 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -28,6 +29,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B0850D112F32DB00009054F1 /* (null) in Frameworks */,
 				B0850C772F32E097009054F1 /* LaunchAtLogin in Frameworks */,
 				B0850C762F32E097009054F1 /* KeyboardShortcuts in Frameworks */,
 			);
@@ -107,6 +109,7 @@
 			packageReferences = (
 				B0850D002F32DB00009054F1 /* XCRemoteSwiftPackageReference "KeyboardShortcuts" */,
 				B0850D022F32DB00009054F1 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Legacy" */,
+				B0850D122F32DB00009054F1 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B0850C3D2F32DAEC009054F1 /* Products */;
@@ -301,7 +304,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = roy.SnapPath;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -332,7 +335,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = roy.SnapPath;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -380,6 +383,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 4.2.0;
+			};
+		};
+		B0850D122F32DB00009054F1 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

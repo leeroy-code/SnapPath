@@ -19,7 +19,7 @@ jobs:
       - name: Set up Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: "latest"
+          xcode-version: "16.2"
 
       - name: Build Universal Binary
         run: |
@@ -29,7 +29,8 @@ jobs:
             -configuration Release \
             -archivePath build/SnapPath.xcarchive \
             -destination "generic/platform=macOS" \
-            ANY_ARCH="x86_64 arm64" \
+            ARCHS="x86_64 arm64" \
+            ONLY_ACTIVE_ARCH=NO \
             SKIP_INSTALL=NO \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
