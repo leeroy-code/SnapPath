@@ -233,7 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func checkForUpdates() {
-        // TODO: Implement with Sparkle
+        UpdateService.shared.checkForUpdates()
     }
 }
 

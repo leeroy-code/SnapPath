@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		B0850C762F32E097009054F1 /* KeyboardShortcuts in Frameworks */ = {isa = PBXBuildFile; productRef = B0850D012F32DB00009054F1 /* KeyboardShortcuts */; };
 		B0850C772F32E097009054F1 /* LaunchAtLogin in Frameworks */ = {isa = PBXBuildFile; productRef = B0850D032F32DB00009054F1 /* LaunchAtLogin */; };
+		B0850C782F32E097009054F1 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B0850D102F32DB00009054F1 /* Sparkle */; };
 		B0850D112F32DB00009054F1 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 /* End PBXBuildFile section */
 
@@ -32,6 +33,7 @@
 				B0850D112F32DB00009054F1 /* (null) in Frameworks */,
 				B0850C772F32E097009054F1 /* LaunchAtLogin in Frameworks */,
 				B0850C762F32E097009054F1 /* KeyboardShortcuts in Frameworks */,
+				B0850C782F32E097009054F1 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +79,7 @@
 			packageProductDependencies = (
 				B0850D012F32DB00009054F1 /* KeyboardShortcuts */,
 				B0850D032F32DB00009054F1 /* LaunchAtLogin */,
+				B0850D102F32DB00009054F1 /* Sparkle */,
 			);
 			productName = SnapPath;
 			productReference = B0850C3C2F32DAEC009054F1 /* SnapPath.app */;
@@ -299,12 +302,14 @@
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_NSScreenCaptureUsageDescription = "SnapPath needs screen recording permission to capture screenshots.";
+				INFOPLIST_KEY_SUFeedURL = "https://raw.githubusercontent.com/leeroy-code/SnapPath/master/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "placeholder_public_key";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = roy.SnapPath;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -335,7 +340,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = roy.SnapPath;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -405,6 +410,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = B0850D022F32DB00009054F1 /* XCRemoteSwiftPackageReference "LaunchAtLogin-Legacy" */;
 			productName = LaunchAtLogin;
+		};
+		B0850D102F32DB00009054F1 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B0850D122F32DB00009054F1 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

@@ -41,7 +41,7 @@ struct AboutView: View {
             
             VStack(spacing: 12) {
                 Button(action: {
-                    if let url = URL(string: "https://github.com/roy/SnapPath") {
+                    if let url = URL(string: "https://github.com/leeroy-code/SnapPath") {
                         NSWorkspace.shared.open(url)
                     }
                 }) {
@@ -50,8 +50,12 @@ struct AboutView: View {
                         Text("about.github".localized)
                     }
                     .frame(width: 160)
+                    .padding(.vertical, 8)
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .cornerRadius(8)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(PlainButtonStyle())
                 
                 Text("about.acknowledgements".localized)
                     .font(.system(size: 12))
