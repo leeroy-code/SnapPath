@@ -3,6 +3,8 @@ import Foundation
 
 final class UpdateService: NSObject, SPUUpdaterDelegate {
     static let shared = UpdateService()
+
+    private static let fallbackFeedURLString = "https://github.com/leeroy-code/SnapPath/releases/latest/download/appcast.xml"
     
     private var updaterController: SPUStandardUpdaterController!
     
@@ -17,6 +19,15 @@ final class UpdateService: NSObject, SPUUpdaterDelegate {
     }
     
     // MARK: - SPUUpdaterDelegate
+
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        if let feedURLString = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+           !feedURLString.isEmpty {
+            return feedURLString
+        }
+
+        return Self.fallbackFeedURLString
+    }
     
     func updater(_ updater: SPUUpdater, willScheduleUpdateCheckAfterDelay delay: TimeInterval) {
         // 更新检查前的回调，如果需要可以做些逻辑

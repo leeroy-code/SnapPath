@@ -2,7 +2,7 @@
 <rss version="2.0" xmlns:sparkle="http://www.sparkle-project.org/Sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
     <channel>
         <title>SnapPath Changelog</title>
-        <link>https://raw.githubusercontent.com/roy/SnapPath/master/appcast.xml</link>
+        <link>https://github.com/leeroy-code/SnapPath/releases/latest/download/appcast.xml</link>
         <description>Most recent changes with links to updates.</description>
         <language>en</language>
         <!-- This file will be automatically populated by GitHub Actions -->

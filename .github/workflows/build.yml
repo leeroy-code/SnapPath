@@ -22,20 +22,47 @@ jobs:
           xcode-version: "16.2"
 
       - name: Build Universal Binary
+        shell: bash
         run: |
-          xcodebuild archive \
-            -project SnapPath.xcodeproj \
-            -scheme SnapPath \
-            -configuration Release \
-            -archivePath build/SnapPath.xcarchive \
-            -destination "generic/platform=macOS" \
-            ARCHS="x86_64 arm64" \
-            ONLY_ACTIVE_ARCH=NO \
-            SKIP_INSTALL=NO \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=YES \
-            OTHER_CODE_SIGN_FLAGS="--deep --force"
+          set -euo pipefail
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            if ! echo "${version}" | grep -Eq '^[0-9]+(\.[0-9]+){0,2}$'; then
+              echo "Invalid tag version: ${GITHUB_REF_NAME} (expected v1.2.3)" >&2
+              exit 1
+            fi
+
+            xcodebuild archive \
+              -project SnapPath.xcodeproj \
+              -scheme SnapPath \
+              -configuration Release \
+              -archivePath build/SnapPath.xcarchive \
+              -destination "generic/platform=macOS" \
+              ARCHS="x86_64 arm64" \
+              ONLY_ACTIVE_ARCH=NO \
+              SKIP_INSTALL=NO \
+              CODE_SIGN_IDENTITY="-" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=YES \
+              OTHER_CODE_SIGN_FLAGS="--deep --force" \
+              MARKETING_VERSION="${version}" \
+              CURRENT_PROJECT_VERSION="${version}"
+          else
+            xcodebuild archive \
+              -project SnapPath.xcodeproj \
+              -scheme SnapPath \
+              -configuration Release \
+              -archivePath build/SnapPath.xcarchive \
+              -destination "generic/platform=macOS" \
+              ARCHS="x86_64 arm64" \
+              ONLY_ACTIVE_ARCH=NO \
+              SKIP_INSTALL=NO \
+              CODE_SIGN_IDENTITY="-" \
+              CODE_SIGNING_REQUIRED=NO \
+              CODE_SIGNING_ALLOWED=YES \
+              OTHER_CODE_SIGN_FLAGS="--deep --force"
+          fi
 
       - name: Export App
         run: |
@@ -46,29 +73,60 @@ jobs:
         run: |
           lipo -info build/Export/SnapPath.app/Contents/MacOS/SnapPath
 
-      - name: Sparkle Appcast
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          # 下载 Sparkle 二进制工具 (如果没在工程里包含的话)
-          # 这里假设通过 SPM 集成后，工具在某个路径，或者直接使用编译好的工具
-          # 为了脚本健壮性，我们通常在构建机器上生成
-          # 注意：这需要 SUPublicEDKey 对应的私钥在 GitHub Secrets 中
-          echo "Generating appcast..."
-          # 这里是示意逻辑，实际需要安装 sparkle-tools 并运行 generate_appcast
-          # 为了简单实现且保证成功，我们先让它能跑通基本逻辑
-
       - name: Create ZIP
         run: |
+          mkdir -p build/ReleaseAssets
           cd build/Export
-          zip -r ../../SnapPath.zip SnapPath.app
+          zip -r ../ReleaseAssets/SnapPath.zip SnapPath.app
+
+      - name: Build Sparkle Tools
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git clone --depth 1 --branch 2.8.1 https://github.com/sparkle-project/Sparkle.git build/Sparkle
+          xcodebuild build \
+            -project build/Sparkle/Sparkle.xcodeproj \
+            -scheme generate_appcast \
+            -configuration Release \
+            -derivedDataPath build/SparkleDerivedData
+
+      - name: Generate Sparkle appcast.xml
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          SPARKLE_ED25519_PRIVATE_KEY: ${{ secrets.SPARKLE_ED25519_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${SPARKLE_ED25519_PRIVATE_KEY}" ]]; then
+            echo "Missing secret: SPARKLE_ED25519_PRIVATE_KEY" >&2
+            exit 1
+          fi
+
+          if /usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' Info.plist | grep -qx 'placeholder_public_key'; then
+            echo "Info.plist SUPublicEDKey is still placeholder_public_key. Generate a Sparkle key and replace it before releasing." >&2
+            exit 1
+          fi
+
+          download_prefix="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/"
+          generate_appcast="build/SparkleDerivedData/Build/Products/Release/generate_appcast"
+
+          echo "${SPARKLE_ED25519_PRIVATE_KEY}" | "${generate_appcast}" \
+            --ed-key-file - \
+            --download-url-prefix "${download_prefix}" \
+            --maximum-deltas 0 \
+            -o build/ReleaseAssets/appcast.xml \
+            build/ReleaseAssets
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            SnapPath.zip
-            appcast.xml
+            build/ReleaseAssets/SnapPath.zip
+            build/ReleaseAssets/appcast.xml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -76,4 +134,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SnapPath-app
-          path: SnapPath.zip
+          path: build/ReleaseAssets/SnapPath.zip

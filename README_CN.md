@@ -70,6 +70,7 @@ _可在设置中自定义（菜单栏图标 → Settings...）_
 - [快速开始](doc/getting-started.md)
 - [使用指南](doc/usage-guide.md)
 - [架构说明](doc/architecture.md)
+- [发布与自动更新](doc/releasing.md)
 
 ## 开源协议
 

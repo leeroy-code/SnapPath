@@ -72,6 +72,7 @@ _Customizable in Settings (Menu Bar → Settings...)_
 - [Getting Started](doc/getting-started.md)
 - [Usage Guide](doc/usage-guide.md)
 - [Architecture](doc/architecture.md)
+- [Releasing & Updates](doc/releasing.md)
 
 ## License
 
