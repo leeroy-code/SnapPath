@@ -1,20 +1,24 @@
 import Cocoa
 
-// MARK: - Region Selector Coordinator (Unified)
+// MARK: - Region Selector Coordinator (Per-Screen, Single-Display Selection)
 
 final class RegionSelectorCoordinator {
-    private var window: UnifiedOverlayWindow?
     enum OutputAction {
         case copyImage
         case saveAndCopyPath
     }
 
+    private var windows: [RegionSelectorWindow] = []
+    private weak var activeWindow: RegionSelectorWindow?
+    private var activeScreen: NSScreen?
+
     private var onComplete: ((CGImage, OutputAction) -> Void)?
     private var onCancel: (() -> Void)?
 
     // Selection State
-    private var startPoint: NSPoint? // Window/Union coordinates
-    private var currentPoint: NSPoint? // Window/Union coordinates
+    private var sourceScreen: NSScreen?
+    private var startPoint: NSPoint? // Global NS coordinates
+    private var currentPoint: NSPoint? // Global NS coordinates
     
     // Edit state
     internal var isEditing = false
@@ -24,28 +28,36 @@ final class RegionSelectorCoordinator {
     func start(onComplete: @escaping (CGImage, OutputAction) -> Void, onCancel: @escaping () -> Void) {
         self.onComplete = onComplete
         self.onCancel = onCancel
-        
-        let unionRect = ScreenCoordinateHelper.allScreensUnionFrame()
-        
+
         // Hide system cursor, we will draw our own crosshair
         NSCursor.hide()
-        
-        let overlayWindow = UnifiedOverlayWindow(
-            frame: unionRect,
-            coordinator: self
-        )
-        overlayWindow.makeKeyAndOrderFront(nil)
-        self.window = overlayWindow
-        
+
+        windows = NSScreen.screens.map { screen in
+            let window = RegionSelectorWindow(screen: screen, coordinator: self)
+            window.orderFront(nil)
+            return window
+        }
+
+        // Ensure the screen under cursor becomes key, so ESC works immediately.
+        if let screen = screenAtMouseLocation() {
+            focusWindowIfNeeded(for: screen)
+        } else {
+            activeWindow = windows.first
+            activeWindow?.makeKeyAndOrderFront(nil)
+        }
+
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func cleanup() {
         NSCursor.unhide()
-        window?.orderOut(nil)
-        window = nil
+        windows.forEach { $0.orderOut(nil) }
+        windows.removeAll()
+        activeWindow = nil
+        activeScreen = nil
         startPoint = nil
         currentPoint = nil
+        sourceScreen = nil
         editorCanvas = nil
         editorToolbar = nil
         isEditing = false
@@ -53,45 +65,46 @@ final class RegionSelectorCoordinator {
 
     // MARK: - Mouse Events (called by view)
 
-    func handleMouseMoved(point: NSPoint) {
-        // Just update current point for crosshair drawing if not selecting or editing
-        if !isEditing {
-            // If we are not dragging, currentPoint tracks mouse for crosshair
-            // If dragging, handleMouseDragged updates it. 
-            // Actually, for crosshair we need a property to track mouse pos even when not dragging.
-            // Let's use currentPoint for crosshair position generally.
-            // But if we are selecting (mouseDown happened), startPoint is set.
-            if startPoint == nil {
-               currentPoint = point
-               refreshWindow()
-            }
-        }
+    func handleMouseMoved(point: NSPoint, on screen: NSScreen) {
+        guard !isEditing else { return }
+        focusWindowIfNeeded(for: screen)
+        currentPoint = globalPoint(from: point, on: screen)
+        refreshAllWindows()
     }
 
-    func handleMouseDown(point: NSPoint) {
+    func handleMouseDown(point: NSPoint, on screen: NSScreen) {
         guard !isEditing else { return }
-        startPoint = point
-        currentPoint = point
-        refreshWindow()
+        focusWindowIfNeeded(for: screen)
+
+        sourceScreen = screen
+        let global = globalPoint(from: point, on: screen)
+        startPoint = global
+        currentPoint = global
+        refreshAllWindows()
     }
 
-    func handleMouseDragged(point: NSPoint) {
+    func handleMouseDragged(point: NSPoint, on screen: NSScreen) {
         guard !isEditing else { return }
-        currentPoint = point
-        refreshWindow()
+        guard let sourceScreen else { return }
+        let global = globalPoint(from: point, on: screen)
+        currentPoint = clampPoint(global, to: sourceScreen.frame)
+        refreshAllWindows()
     }
 
-    func handleMouseUp(point: NSPoint) {
+    func handleMouseUp(point: NSPoint, on screen: NSScreen) {
         guard !isEditing else { return }
-        currentPoint = point
-        let rect = computeSelectionRect()
+        guard let sourceScreen else { return }
 
-        guard rect.width > 3, rect.height > 3 else {
+        let global = globalPoint(from: point, on: screen)
+        currentPoint = clampPoint(global, to: sourceScreen.frame)
+        let rectGlobal = computeSelectionRect()
+
+        guard rectGlobal.width > 3, rectGlobal.height > 3 else {
             cancel()
             return
         }
 
-        enterEditMode(with: rect)
+        enterEditMode(with: rectGlobal)
     }
 
     func cancel() {
@@ -123,44 +136,63 @@ final class RegionSelectorCoordinator {
         )
     }
     
-    private func refreshWindow() {
-        window?.contentView?.needsDisplay = true
+    private func refreshAllWindows() {
+        windows.forEach { ($0.contentView as? RegionSelectorView)?.needsDisplay = true }
+    }
+
+    private func focusWindowIfNeeded(for screen: NSScreen) {
+        guard activeScreen !== screen else { return }
+        activeScreen = screen
+        guard let window = windows.first(where: { $0.captureScreen === screen }) else { return }
+        activeWindow = window
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func screenAtMouseLocation() -> NSScreen? {
+        let mouseLocation = NSEvent.mouseLocation
+        return windows.map(\.captureScreen).first { NSMouseInRect(mouseLocation, $0.frame, false) }
+    }
+
+    private func globalPoint(from localPoint: NSPoint, on screen: NSScreen) -> NSPoint {
+        NSPoint(x: localPoint.x + screen.frame.origin.x, y: localPoint.y + screen.frame.origin.y)
+    }
+
+    private func localRect(from globalRect: NSRect, on screen: NSScreen) -> NSRect {
+        NSRect(
+            x: globalRect.origin.x - screen.frame.origin.x,
+            y: globalRect.origin.y - screen.frame.origin.y,
+            width: globalRect.width,
+            height: globalRect.height
+        )
+    }
+
+    private func clampPoint(_ point: NSPoint, to frame: NSRect) -> NSPoint {
+        let x = min(max(point.x, frame.minX), frame.maxX)
+        let y = min(max(point.y, frame.minY), frame.maxY)
+        return NSPoint(x: x, y: y)
     }
 
     // MARK: - Edit Mode
 
-    private func enterEditMode(with rect: NSRect) {
+    private func enterEditMode(with rectGlobal: NSRect) {
         isEditing = true
         NSCursor.unhide() // Show cursor for editing
         NSCursor.arrow.set()
         
-        guard let window = window else { return }
+        guard let sourceScreen else {
+            cancel()
+            return
+        }
+        guard let window = windows.first(where: { $0.captureScreen === sourceScreen }) else {
+            cancel()
+            return
+        }
         
         // Capture image using the overlay window ID to exclude it
-        // The rect is in Window(Union) coordinates.
+        // The rect is in global NS coordinates.
         // We need to convert it to CG coordinates for capture.
-        
-        let unionRect = ScreenCoordinateHelper.allScreensUnionFrame()
-        // Window origin is at unionRect.origin (bottom-left)
-        // Global NS Point = Window Point + unionRect.origin ? 
-        // No, window frame IS unionRect. So window coordinates (0,0) is bottom-left of the window,
-        // which corresponds to unionRect.origin in global NS space?
-        // Wait, NSWindow coordinates are relative to the window's bottom-left.
-        // Global NS coordinates are relative to the primary screen's bottom-left.
-        
-        // Let's clarify coordinate systems.
-        // `point` passed from View is `locationInWindow`.
-        // If Window Frame is `unionRect`, then:
-        // GlobalNS = Point + Window.Frame.Origin
-        
-        let globalRect = NSRect(
-            x: rect.origin.x + unionRect.origin.x,
-            y: rect.origin.y + unionRect.origin.y,
-            width: rect.width,
-            height: rect.height
-        )
-        
-        let cgRect = ScreenCoordinateHelper.nsRectToCG(globalRect)
+
+        let cgRect = ScreenCoordinateHelper.nsRectToCG(rectGlobal)
         
         guard let image = CGWindowListCreateImage(
             cgRect,
@@ -172,11 +204,22 @@ final class RegionSelectorCoordinator {
             return
         }
 
+        // Keep only the source screen window for editing.
+        for w in windows where w !== window {
+            w.orderOut(nil)
+        }
+        windows = [window]
+        activeWindow = window
+        activeScreen = sourceScreen
+
         // Setup Editor UI
-        guard let contentView = window.contentView as? RegionSelectorView else { return }
+        guard let contentView = window.contentView as? RegionSelectorView else {
+            cancel()
+            return
+        }
         
-        // Local rect for subviews is same as rect (since we are in the same view)
-        let localRect = rect
+        // Local rect for subviews is in the source screen window coordinate space.
+        let localRect = localRect(from: rectGlobal, on: sourceScreen)
         
         // Canvas
         let canvas = EditorCanvasView(image: image)
@@ -217,7 +260,7 @@ final class RegionSelectorCoordinator {
         toolbar.frame = NSRect(x: finalX, y: toolbarY, width: toolbarWidth, height: toolbarHeight)
         toolbar.translatesAutoresizingMaskIntoConstraints = true
         
-        refreshWindow()
+        refreshAllWindows()
     }
 }
 
@@ -295,14 +338,7 @@ extension RegionSelectorCoordinator: EditorToolbarViewDelegate, EditorCanvasView
         guard let finalImage = editorCanvas?.renderFinalImage() else { return }
         
         // Determine which screen the selection was on to ensure correct scaling
-        let selectionRect = getSelectionRect()
-        let unionRect = ScreenCoordinateHelper.allScreensUnionFrame()
-        let globalRect = NSRect(
-            x: selectionRect.origin.x + unionRect.origin.x,
-            y: selectionRect.origin.y + unionRect.origin.y,
-            width: selectionRect.width,
-            height: selectionRect.height
-        )
+        let globalRect = getSelectionRect()
         
         // Find screen with largest intersection
         var bestScreen: NSScreen?
@@ -332,20 +368,20 @@ extension RegionSelectorCoordinator: EditorToolbarViewDelegate, EditorCanvasView
     }
 }
 
-// MARK: - Unified Overlay Window
+// MARK: - Region Selector Window
 
-final class UnifiedOverlayWindow: NSWindow {
-    private weak var coordinator: RegionSelectorCoordinator?
+final class RegionSelectorWindow: NSWindow {
+    let captureScreen: NSScreen
 
-    init(frame: NSRect, coordinator: RegionSelectorCoordinator) {
-        self.coordinator = coordinator
+    init(screen: NSScreen, coordinator: RegionSelectorCoordinator) {
+        self.captureScreen = screen
         super.init(
-            contentRect: frame,
+            contentRect: screen.frame,
             styleMask: .borderless,
             backing: .buffered,
             defer: false
         )
-        self.level = .statusBar
+        self.level = .screenSaver
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
@@ -353,11 +389,11 @@ final class UnifiedOverlayWindow: NSWindow {
         self.acceptsMouseMovedEvents = true
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         
-        // IMPORTANT: We set the frame carefully to align with the union rect
-        self.setFrame(frame, display: true)
+        self.setFrame(screen.frame, display: true)
 
         let selectorView = RegionSelectorView(
-            frame: NSRect(origin: .zero, size: frame.size),
+            frame: NSRect(origin: .zero, size: screen.frame.size),
+            screen: screen,
             coordinator: coordinator
         )
         self.contentView = selectorView
@@ -369,10 +405,12 @@ final class UnifiedOverlayWindow: NSWindow {
 // MARK: - Region Selector View
 
 final class RegionSelectorView: NSView {
+    private let screen: NSScreen
     private weak var coordinator: RegionSelectorCoordinator?
     private var trackingArea: NSTrackingArea?
 
-    init(frame: NSRect, coordinator: RegionSelectorCoordinator) {
+    init(frame: NSRect, screen: NSScreen, coordinator: RegionSelectorCoordinator) {
+        self.screen = screen
         self.coordinator = coordinator
         super.init(frame: frame)
     }
@@ -401,22 +439,22 @@ final class RegionSelectorView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        coordinator?.handleMouseMoved(point: point)
+        coordinator?.handleMouseMoved(point: point, on: screen)
     }
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        coordinator?.handleMouseDown(point: point)
+        coordinator?.handleMouseDown(point: point, on: screen)
     }
 
     override func mouseDragged(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        coordinator?.handleMouseDragged(point: point)
+        coordinator?.handleMouseDragged(point: point, on: screen)
     }
 
     override func mouseUp(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        coordinator?.handleMouseUp(point: point)
+        coordinator?.handleMouseUp(point: point, on: screen)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -435,14 +473,16 @@ final class RegionSelectorView: NSView {
         // 2. Draw Selection (Clear Rect) if active
         // Only draw selection if we have a start point
         if let _ = coordinator.getStartPoint() {
-             let selectionRect = coordinator.getSelectionRect()
+             let selectionRectGlobal = coordinator.getSelectionRect()
+             let visibleGlobal = selectionRectGlobal.intersection(screen.frame)
              
-             if selectionRect.width > 1 && selectionRect.height > 1 {
+             if !visibleGlobal.isNull, visibleGlobal.width > 1, visibleGlobal.height > 1 {
                  NSColor.clear.setFill()
-                 selectionRect.fill(using: .copy)
+                 globalRectToLocal(visibleGlobal).fill(using: .copy)
                  
                  // Draw Border if not editing
                  if !coordinator.isEditing {
+                     let selectionRect = globalRectToLocal(selectionRectGlobal)
                      DesignTokens.Colors.selectionBorder.setStroke()
                      let border = NSBezierPath(rect: selectionRect)
                      border.lineWidth = DesignTokens.Border.widthMedium
@@ -456,8 +496,23 @@ final class RegionSelectorView: NSView {
         
         // 3. Draw Crosshair (if not editing)
         if !coordinator.isEditing, let currentPoint = coordinator.getCurrentMousePoint() {
-            drawCrosshair(at: currentPoint)
+            if NSMouseInRect(currentPoint, screen.frame, false) {
+                drawCrosshair(at: globalPointToLocal(currentPoint))
+            }
         }
+    }
+
+    private func globalPointToLocal(_ point: NSPoint) -> NSPoint {
+        NSPoint(x: point.x - screen.frame.origin.x, y: point.y - screen.frame.origin.y)
+    }
+
+    private func globalRectToLocal(_ rect: NSRect) -> NSRect {
+        NSRect(
+            x: rect.origin.x - screen.frame.origin.x,
+            y: rect.origin.y - screen.frame.origin.y,
+            width: rect.width,
+            height: rect.height
+        )
     }
     
     private func drawCrosshair(at point: NSPoint) {
