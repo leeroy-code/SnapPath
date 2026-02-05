@@ -35,17 +35,9 @@ final class ScreenCaptureService {
         let coordinator = RegionSelectorCoordinator()
         regionSelectorCoordinator = coordinator
 
-        // Coordinator now handles the entire flow including aggregation and editing
-        coordinator.start { [weak self] image, action in
+        coordinator.start { [weak self] image, sourceScreen in
             self?.regionSelectorCoordinator = nil
-            
-            switch action {
-            case .copyImage:
-                ClipboardService.copyImage(image)
-                NotificationService.showMessage(title: "pin.imageCopied".localized, body: "")
-            case .saveAndCopyPath:
-                self?.saveAndNotify(image)
-            }
+            self?.showEditor(for: image, on: sourceScreen)
         } onCancel: { [weak self] in
             self?.regionSelectorCoordinator = nil
         }
@@ -84,16 +76,9 @@ final class ScreenCaptureService {
         let coordinator = RegionSelectorCoordinator()
         regionSelectorCoordinator = coordinator
 
-        coordinator.start { [weak self] image, action in
+        coordinator.start { [weak self] image, sourceScreen in
             self?.regionSelectorCoordinator = nil
-            // If user explicitly clicks toolbar buttons, respect them even in pin mode
-            switch action {
-            case .copyImage:
-                ClipboardService.copyImage(image)
-                NotificationService.showMessage(title: "pin.imageCopied".localized, body: "")
-            case .saveAndCopyPath:
-                self?.saveAndNotify(image)
-            }
+            self?.showEditor(for: image, on: sourceScreen)
         } onCancel: { [weak self] in
             self?.regionSelectorCoordinator = nil
         }
@@ -177,8 +162,6 @@ final class ScreenCaptureService {
 
 extension NSScreen {
     func toCGRect() -> CGRect {
-        guard let primary = NSScreen.screens.first else { return frame }
-        let y = primary.frame.height - frame.origin.y - frame.height
-        return CGRect(x: frame.origin.x, y: y, width: frame.width, height: frame.height)
+        ScreenCoordinateHelper.nsRectToCG(frame)
     }
 }

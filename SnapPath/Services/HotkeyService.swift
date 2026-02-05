@@ -7,6 +7,7 @@ extension KeyboardShortcuts.Name {
     static let captureFullScreen = Self("captureFullScreen")
     static let captureWindow = Self("captureWindow")
     static let pinRegion = Self("pinRegion")
+    static let copyFinderPath = Self("copyFinderPath")
 }
 
 enum HotkeyService {
@@ -17,6 +18,7 @@ enum HotkeyService {
             KeyboardShortcuts.setShortcut(.init(.a, modifiers: [.command, .shift]), for: .captureFullScreen)
             KeyboardShortcuts.setShortcut(.init(.w, modifiers: [.command, .shift]), for: .captureWindow)
             KeyboardShortcuts.setShortcut(.init(.p, modifiers: [.command, .shift]), for: .pinRegion)
+            KeyboardShortcuts.setShortcut(.init(.c, modifiers: [.command, .shift]), for: .copyFinderPath)
             UserDefaults.standard.set(true, forKey: "hotkeysConfigured")
         }
 
@@ -34,6 +36,10 @@ enum HotkeyService {
 
         KeyboardShortcuts.onKeyUp(for: .pinRegion) {
             ScreenCaptureService.shared.captureAndPin()
+        }
+
+        KeyboardShortcuts.onKeyUp(for: .copyFinderPath) {
+            FinderService.copySelectedPaths()
         }
     }
 }

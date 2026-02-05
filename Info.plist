@@ -26,6 +26,8 @@
 	<string>NSApplication</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>SnapPath needs screen recording permission to capture screenshots.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>SnapPath needs permission to access Finder for copying selected file paths.</string>
 	<key>SUFeedURL</key>
 	<string>https://github.com/leeroy-code/SnapPath/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>

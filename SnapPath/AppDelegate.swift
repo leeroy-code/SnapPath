@@ -75,6 +75,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        let copyFinderPathItem = NSMenuItem(title: "menu.copyFinderPath".localized, action: #selector(copyFinderPath), keyEquivalent: "")
+        copyFinderPathItem.target = self
+        menu.addItem(copyFinderPathItem)
+
+        menu.addItem(.separator())
+
         let openFolderItem = NSMenuItem(title: "menu.openFolder".localized, action: #selector(openScreenshotsFolder), keyEquivalent: "")
         openFolderItem.target = self
         menu.addItem(openFolderItem)
@@ -101,6 +107,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(quitItem)
 
         statusItem.menu = menu
+    }
+
+    @objc private func copyFinderPath() {
+        FinderService.copySelectedPaths()
     }
 
     private func updateSettingsWindowTitle() {

@@ -116,8 +116,73 @@
         }
       }
     },
-    "Language" : {
-
+    "finderPermission.later" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Later"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稍后"
+          }
+        }
+      }
+    },
+    "finderPermission.message" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please allow SnapPath to control Finder in System Settings → Privacy & Security → Automation, then try again."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在 系统设置 → 隐私与安全 → 自动化 中允许 SnapPath 控制 Finder，然后再试一次。"
+          }
+        }
+      }
+    },
+    "finderPermission.openSettings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开设置"
+          }
+        }
+      }
+    },
+    "finderPermission.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finder permission required"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要授权 Finder"
+          }
+        }
+      }
     },
     "menu.about" : {
       "extractionState" : "manual",
@@ -149,6 +214,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "检查更新..."
+          }
+        }
+      }
+    },
+    "menu.copyFinderPath" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Finder Path"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制 Finder 路径"
           }
         }
       }
@@ -476,6 +558,23 @@
         }
       }
     },
+    "settings.autoCheckUpdates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatically check for updates"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
+          }
+        }
+      }
+    },
     "settings.choose" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -489,6 +588,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择..."
+          }
+        }
+      }
+    },
+    "settings.copyFinderPath" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy Finder Path:"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制 Finder 路径:"
           }
         }
       }
@@ -676,23 +792,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示通知"
-          }
-        }
-      }
-    },
-    "settings.autoCheckUpdates" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Automatically check for updates"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动检查更新"
           }
         }
       }

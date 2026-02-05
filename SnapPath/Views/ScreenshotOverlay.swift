@@ -1,31 +1,22 @@
 import Cocoa
 
-// MARK: - Region Selector Coordinator (Per-Screen, Single-Display Selection)
+// MARK: - Region Selector Coordinator
 
 final class RegionSelectorCoordinator {
-    enum OutputAction {
-        case copyImage
-        case saveAndCopyPath
-    }
-
     private var windows: [RegionSelectorWindow] = []
     private weak var activeWindow: RegionSelectorWindow?
     private var activeScreen: NSScreen?
+    private var pendingCaptureWorkItem: DispatchWorkItem?
 
-    private var onComplete: ((CGImage, OutputAction) -> Void)?
+    private var onComplete: ((CGImage, NSScreen?) -> Void)?
     private var onCancel: (() -> Void)?
 
     // Selection State
-    private var sourceScreen: NSScreen?
     private var startPoint: NSPoint? // Global NS coordinates
     private var currentPoint: NSPoint? // Global NS coordinates
-    
-    // Edit state
-    internal var isEditing = false
-    private var editorCanvas: EditorCanvasView?
-    private var editorToolbar: EditorToolbarView?
+    private let captureDelay: TimeInterval = 0.12
 
-    func start(onComplete: @escaping (CGImage, OutputAction) -> Void, onCancel: @escaping () -> Void) {
+    func start(onComplete: @escaping (CGImage, NSScreen?) -> Void, onCancel: @escaping () -> Void) {
         self.onComplete = onComplete
         self.onCancel = onCancel
 
@@ -55,48 +46,41 @@ final class RegionSelectorCoordinator {
         windows.removeAll()
         activeWindow = nil
         activeScreen = nil
+        pendingCaptureWorkItem?.cancel()
+        pendingCaptureWorkItem = nil
         startPoint = nil
         currentPoint = nil
-        sourceScreen = nil
-        editorCanvas = nil
-        editorToolbar = nil
-        isEditing = false
     }
 
     // MARK: - Mouse Events (called by view)
 
     func handleMouseMoved(point: NSPoint, on screen: NSScreen) {
-        guard !isEditing else { return }
         focusWindowIfNeeded(for: screen)
         currentPoint = globalPoint(from: point, on: screen)
         refreshAllWindows()
     }
 
     func handleMouseDown(point: NSPoint, on screen: NSScreen) {
-        guard !isEditing else { return }
         focusWindowIfNeeded(for: screen)
 
-        sourceScreen = screen
-        let global = globalPoint(from: point, on: screen)
+        let global = clampPoint(globalPoint(from: point, on: screen), to: ScreenCoordinateHelper.allScreensUnionFrame())
         startPoint = global
         currentPoint = global
         refreshAllWindows()
     }
 
     func handleMouseDragged(point: NSPoint, on screen: NSScreen) {
-        guard !isEditing else { return }
-        guard let sourceScreen else { return }
+        guard startPoint != nil else { return }
         let global = globalPoint(from: point, on: screen)
-        currentPoint = clampPoint(global, to: sourceScreen.frame)
+        currentPoint = clampPoint(global, to: ScreenCoordinateHelper.allScreensUnionFrame())
         refreshAllWindows()
     }
 
     func handleMouseUp(point: NSPoint, on screen: NSScreen) {
-        guard !isEditing else { return }
-        guard let sourceScreen else { return }
+        guard startPoint != nil else { return }
 
         let global = globalPoint(from: point, on: screen)
-        currentPoint = clampPoint(global, to: sourceScreen.frame)
+        currentPoint = clampPoint(global, to: ScreenCoordinateHelper.allScreensUnionFrame())
         let rectGlobal = computeSelectionRect()
 
         guard rectGlobal.width > 3, rectGlobal.height > 3 else {
@@ -104,7 +88,7 @@ final class RegionSelectorCoordinator {
             return
         }
 
-        enterEditMode(with: rectGlobal)
+        captureSelection(rectGlobal: rectGlobal)
     }
 
     func cancel() {
@@ -157,214 +141,64 @@ final class RegionSelectorCoordinator {
         NSPoint(x: localPoint.x + screen.frame.origin.x, y: localPoint.y + screen.frame.origin.y)
     }
 
-    private func localRect(from globalRect: NSRect, on screen: NSScreen) -> NSRect {
-        NSRect(
-            x: globalRect.origin.x - screen.frame.origin.x,
-            y: globalRect.origin.y - screen.frame.origin.y,
-            width: globalRect.width,
-            height: globalRect.height
-        )
-    }
-
     private func clampPoint(_ point: NSPoint, to frame: NSRect) -> NSPoint {
         let x = min(max(point.x, frame.minX), frame.maxX)
         let y = min(max(point.y, frame.minY), frame.maxY)
         return NSPoint(x: x, y: y)
     }
 
-    // MARK: - Edit Mode
-
-    private func enterEditMode(with rectGlobal: NSRect) {
-        isEditing = true
-        NSCursor.unhide() // Show cursor for editing
-        NSCursor.arrow.set()
-        
-        guard let sourceScreen else {
-            cancel()
-            return
-        }
-        guard let window = windows.first(where: { $0.captureScreen === sourceScreen }) else {
-            cancel()
-            return
-        }
-        
-        // Capture image using the overlay window ID to exclude it
-        // The rect is in global NS coordinates.
-        // We need to convert it to CG coordinates for capture.
-
-        let cgRect = ScreenCoordinateHelper.nsRectToCG(rectGlobal)
-        
-        guard let image = CGWindowListCreateImage(
-            cgRect,
-            .optionOnScreenBelowWindow,
-            CGWindowID(window.windowNumber),
-            [.bestResolution]
-        ) else {
+    private func captureSelection(rectGlobal: NSRect) {
+        let unionFrame = ScreenCoordinateHelper.allScreensUnionFrame()
+        let captureRect = rectGlobal.intersection(unionFrame)
+        guard !captureRect.isNull, captureRect.width > 3, captureRect.height > 3 else {
             cancel()
             return
         }
 
-        // Keep only the source screen window for editing.
-        for w in windows where w !== window {
-            w.orderOut(nil)
-        }
-        windows = [window]
-        activeWindow = window
-        activeScreen = sourceScreen
+        let targetScreen = screenWithLargestIntersection(for: captureRect)
+        let cgRect = ScreenCoordinateHelper.nsRectToCG(captureRect)
 
-        // Setup Editor UI
-        guard let contentView = window.contentView as? RegionSelectorView else {
-            cancel()
-            return
-        }
-        
-        // Local rect for subviews is in the source screen window coordinate space.
-        let localRect = localRect(from: rectGlobal, on: sourceScreen)
-        
-        // Canvas
-        let canvas = EditorCanvasView(image: image)
-        canvas.frame = localRect
-        canvas.wantsLayer = true
-        canvas.delegate = self
-        
-        contentView.addSubview(canvas)
-        self.editorCanvas = canvas
+        // Hide overlays before capture to avoid including them in final image.
+        windows.forEach { $0.orderOut(nil) }
 
-        // Toolbar
-        let toolbar = EditorToolbarView(frame: .zero)
-        toolbar.delegate = self
-        toolbar.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(toolbar)
-        self.editorToolbar = toolbar
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingCaptureWorkItem = nil
 
-        // Position Toolbar
-        let toolbarSize = toolbar.fittingSize
-        let toolbarWidth = toolbarSize.width > 0 ? toolbarSize.width : 420
-        let toolbarHeight = DesignTokens.Sizes.toolbarHeight
-        let spacing = DesignTokens.Spacing.s
-
-        let midX = localRect.midX
-        let toolbarX = midX - (toolbarWidth / 2)
-        
-        var toolbarY = localRect.minY - spacing - toolbarHeight
-        
-        if toolbarY < spacing {
-             toolbarY = localRect.minY + spacing
-        }
-        
-        let contentWidth = contentView.bounds.width
-        var finalX = toolbarX
-        if finalX < spacing { finalX = spacing }
-        if finalX + toolbarWidth > contentWidth - spacing { finalX = contentWidth - spacing - toolbarWidth }
-
-        toolbar.frame = NSRect(x: finalX, y: toolbarY, width: toolbarWidth, height: toolbarHeight)
-        toolbar.translatesAutoresizingMaskIntoConstraints = true
-        
-        refreshAllWindows()
-    }
-}
-
-// MARK: - Editor Delegates
-
-extension RegionSelectorCoordinator: EditorToolbarViewDelegate, EditorCanvasViewDelegate {
-    func toolbarDidSelectTool(_ tool: EditorTool?) {
-        editorCanvas?.currentTool = tool
-        if tool != .crop {
-            editorCanvas?.clearCrop()
-        }
-    }
-
-    func toolbarDidSelectColor(_ color: NSColor) {
-        editorCanvas?.currentColor = color
-    }
-    
-    func toolbarDidChangeFontSize(_ size: CGFloat) {
-        editorCanvas?.currentFontSize = size
-    }
-
-    func toolbarDidTapUndo() {
-        editorCanvas?.undo()
-        editorToolbar?.setUndoEnabled(editorCanvas?.canUndo ?? false)
-    }
-
-    func toolbarDidTapCancel() {
-        cancel()
-    }
-
-    func toolbarDidTapCopyImage() {
-        guard let finalImage = editorCanvas?.renderFinalImage() else { return }
-        cleanup()
-        onComplete?(finalImage, .copyImage)
-    }
-
-    func toolbarDidTapCopyPath() {
-        guard let finalImage = editorCanvas?.renderFinalImage() else { return }
-        cleanup()
-        onComplete?(finalImage, .saveAndCopyPath)
-    }
-
-    func toolbarDidTapOCR() {
-        guard let finalImage = editorCanvas?.renderFinalImage() else {
-            return
-        }
-
-        OCRService.recognizeText(from: finalImage) { result in
-            if let text = result {
-                // 1. 复制到剪贴板
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(text, forType: .string)
-
-                // 2. 显示通知
-                NotificationService.showMessage(
-                    title: "toolbar.ocr".localized,
-                    body: "notification.ocrSuccess".localized
-                )
-                
-                // 3. 识别成功后自动关闭覆盖层
-                self.cleanup()
-            } else {
-                // 处理识别失败
-                let alert = NSAlert()
-                alert.messageText = "OCR 失败"
-                alert.informativeText = "未能从图片中提取到文字。"
-                alert.alertStyle = .warning
-                alert.runModal()
+            guard let image = CGWindowListCreateImage(
+                cgRect,
+                .optionOnScreenOnly,
+                kCGNullWindowID,
+                [.bestResolution]
+            ) else {
+                self.cancel()
+                return
             }
+
+            self.cleanup()
+            self.onComplete?(image, targetScreen)
         }
+
+        pendingCaptureWorkItem?.cancel()
+        pendingCaptureWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + captureDelay, execute: workItem)
     }
 
-    func toolbarDidTapPin() {
-        guard let finalImage = editorCanvas?.renderFinalImage() else { return }
-        
-        // Determine which screen the selection was on to ensure correct scaling
-        let globalRect = getSelectionRect()
-        
-        // Find screen with largest intersection
+    private func screenWithLargestIntersection(for rect: NSRect) -> NSScreen? {
         var bestScreen: NSScreen?
         var maxArea: CGFloat = 0
-        
+
         for screen in NSScreen.screens {
-            let intersection = globalRect.intersection(screen.frame)
-            if !intersection.isNull {
-                let area = intersection.width * intersection.height
-                if area > maxArea {
-                    maxArea = area
-                    bestScreen = screen
-                }
+            let intersection = rect.intersection(screen.frame)
+            guard !intersection.isNull else { continue }
+            let area = intersection.width * intersection.height
+            if area > maxArea {
+                maxArea = area
+                bestScreen = screen
             }
         }
-        
-        cleanup()
-        PinService.shared.pin(image: finalImage, on: bestScreen)
-    }
 
-    func canvasDidUpdateAnnotations() {
-        editorToolbar?.setUndoEnabled(editorCanvas?.canUndo ?? false)
-    }
-
-    func canvasDidRequestToolChange(_ tool: EditorTool) {
-        editorToolbar?.selectTool(tool)
+        return bestScreen
     }
 }
 
@@ -419,6 +253,7 @@ final class RegionSelectorView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -426,8 +261,8 @@ final class RegionSelectorView: NSView {
             removeTrackingArea(existing)
         }
         let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways],
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .enabledDuringMouseDrag, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -476,26 +311,23 @@ final class RegionSelectorView: NSView {
              let selectionRectGlobal = coordinator.getSelectionRect()
              let visibleGlobal = selectionRectGlobal.intersection(screen.frame)
              
-             if !visibleGlobal.isNull, visibleGlobal.width > 1, visibleGlobal.height > 1 {
+            if !visibleGlobal.isNull, visibleGlobal.width > 1, visibleGlobal.height > 1 {
                  NSColor.clear.setFill()
                  globalRectToLocal(visibleGlobal).fill(using: .copy)
-                 
-                 // Draw Border if not editing
-                 if !coordinator.isEditing {
-                     let selectionRect = globalRectToLocal(selectionRectGlobal)
-                     DesignTokens.Colors.selectionBorder.setStroke()
-                     let border = NSBezierPath(rect: selectionRect)
-                     border.lineWidth = DesignTokens.Border.widthMedium
-                     border.stroke()
-                     
-                     // Draw Dimensions Label
-                     drawDimensions(rect: selectionRect)
-                 }
+
+                 let selectionRect = globalRectToLocal(selectionRectGlobal)
+                 DesignTokens.Colors.selectionBorder.setStroke()
+                 let border = NSBezierPath(rect: selectionRect)
+                 border.lineWidth = DesignTokens.Border.widthMedium
+                 border.stroke()
+
+                 // Draw Dimensions Label
+                 drawDimensions(rect: selectionRect)
              }
         }
         
-        // 3. Draw Crosshair (if not editing)
-        if !coordinator.isEditing, let currentPoint = coordinator.getCurrentMousePoint() {
+        // 3. Draw Crosshair
+        if let currentPoint = coordinator.getCurrentMousePoint() {
             if NSMouseInRect(currentPoint, screen.frame, false) {
                 drawCrosshair(at: globalPointToLocal(currentPoint))
             }
@@ -561,14 +393,7 @@ final class RegionSelectorView: NSView {
     }
 }
 
-// MARK: - Window Selector Coordinator (Stub for compatibility)
-// Note: User asked to focus on fixing crosshair. Window selector might need similar treatment, 
-// but for now we keep it minimal or untouched if it was shared.
-// The original file had WindowSelectorCoordinator. We should preserve it but maybe adapt it 
-// or leave it as is if it doesn't conflict. 
-// However, the original prompt implies fixing the "Region Capture" mode effectively.
-// I will keep WindowSelectorCoordinator mostly as is but ensure it compiles with any changes.
-// Since I'm replacing the whole file, I need to include it.
+// MARK: - Window Selector Coordinator
 
 final class WindowSelectorCoordinator {
     private var windows: [WindowSelectorWindow] = []
@@ -702,6 +527,7 @@ final class WindowSelectorView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -709,8 +535,8 @@ final class WindowSelectorView: NSView {
             removeTrackingArea(existing)
         }
         let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways],
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .enabledDuringMouseDrag, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -806,11 +632,12 @@ final class WindowSelectorView: NSView {
     }
 
     private func cgRectToNSRect(_ cgRect: CGRect) -> NSRect {
-        guard let primary = NSScreen.screens.first else { return .zero }
-        let screenFrame = screen.frame
-        let globalNSY = primary.frame.height - cgRect.origin.y - cgRect.height
-        let localX = cgRect.origin.x - screenFrame.origin.x + bounds.origin.x
-        let localY = globalNSY - screenFrame.origin.y + bounds.origin.y
-        return NSRect(x: localX, y: localY, width: cgRect.width, height: cgRect.height)
+        let globalNSRect = ScreenCoordinateHelper.cgRectToNS(cgRect)
+        return NSRect(
+            x: globalNSRect.origin.x - screen.frame.origin.x + bounds.origin.x,
+            y: globalNSRect.origin.y - screen.frame.origin.y + bounds.origin.y,
+            width: globalNSRect.width,
+            height: globalNSRect.height
+        )
     }
 }

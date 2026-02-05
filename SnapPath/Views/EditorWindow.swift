@@ -182,7 +182,7 @@ extension EditorWindow: EditorToolbarViewDelegate {
             showRenderError()
             return
         }
-        PinService.shared.pin(image: finalImage)
+        PinService.shared.pin(image: finalImage, on: sourceScreen)
         onCancel() // Close editor after pinning
     }
 
