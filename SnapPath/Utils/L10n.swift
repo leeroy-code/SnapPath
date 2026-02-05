@@ -39,4 +39,5 @@ extension String {
 
 extension Notification.Name {
     static let languageDidChange = Notification.Name("languageDidChange")
+    static let autoUpdateSettingDidChange = Notification.Name("autoUpdateSettingDidChange")
 }

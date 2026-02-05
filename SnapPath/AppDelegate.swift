@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         HotkeyService.setupHotkeys()
         NotificationService.requestAuthorization()
+        UpdateService.shared.performStartupAutoCheckIfNeeded()
 
         // Observe language changes to rebuild menu
         languageObserver = NotificationCenter.default.addObserver(

@@ -8,6 +8,13 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(saveDirectory, forKey: "saveDirectory") }
     }
 
+    @Published var autoCheckUpdates: Bool {
+        didSet {
+            UserDefaults.standard.set(autoCheckUpdates, forKey: "autoCheckUpdates")
+            NotificationCenter.default.post(name: .autoUpdateSettingDidChange, object: nil)
+        }
+    }
+
     @Published var playSoundEffect: Bool {
         didSet { UserDefaults.standard.set(playSoundEffect, forKey: "playSoundEffect") }
     }
@@ -32,6 +39,7 @@ final class AppSettings: ObservableObject {
             ?? NSHomeDirectory() + "/Downloads"
 
         self.saveDirectory = UserDefaults.standard.string(forKey: "saveDirectory") ?? defaultDownloads
+        self.autoCheckUpdates = UserDefaults.standard.object(forKey: "autoCheckUpdates") as? Bool ?? true
         self.playSoundEffect = UserDefaults.standard.object(forKey: "playSoundEffect") as? Bool ?? true
         self.showNotification = UserDefaults.standard.object(forKey: "showNotification") as? Bool ?? true
         self.showEditorAfterCapture = UserDefaults.standard.object(forKey: "showEditorAfterCapture") as? Bool ?? true

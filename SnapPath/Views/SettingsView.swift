@@ -123,6 +123,14 @@ struct SettingsView: View {
                                 title: "settings.showNotification".localized,
                                 isOn: settings.showNotification
                             ) { settings.showNotification = $0 }
+
+                            Divider()
+                                .padding(.leading, 12)
+
+                            SettingsToggleRow(
+                                title: "settings.autoCheckUpdates".localized,
+                                isOn: settings.autoCheckUpdates
+                            ) { settings.autoCheckUpdates = $0 }
                         }
                     }
                 }

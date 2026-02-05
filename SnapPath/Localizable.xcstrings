@@ -680,6 +680,23 @@
         }
       }
     },
+    "settings.autoCheckUpdates" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatically check for updates"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
+          }
+        }
+      }
+    },
     "settings.windowCapture" : {
       "extractionState" : "manual",
       "localizations" : {
