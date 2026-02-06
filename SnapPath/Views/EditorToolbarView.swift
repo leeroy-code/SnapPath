@@ -16,6 +16,7 @@ final class EditorToolbarView: NSView {
 
     weak var delegate: EditorToolbarViewDelegate?
 
+    private let toolButtonSize: CGFloat = 30
     private var selectedTool: EditorTool? = .arrow
     private var toolButtons: [EditorTool: NSButton] = [:]
     private var colorWell: NSColorWell!
@@ -42,8 +43,8 @@ final class EditorToolbarView: NSView {
         
         let stackView = NSStackView()
         stackView.orientation = .horizontal
-        stackView.spacing = DesignTokens.Spacing.s
-        stackView.edgeInsets = NSEdgeInsets(top: 0, left: DesignTokens.Spacing.m, bottom: 0, right: DesignTokens.Spacing.m)
+        stackView.spacing = DesignTokens.Spacing.xs
+        stackView.edgeInsets = NSEdgeInsets(top: 0, left: DesignTokens.Spacing.s, bottom: 0, right: DesignTokens.Spacing.s)
         stackView.alignment = .centerY
         stackView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stackView)
@@ -214,11 +215,11 @@ final class EditorToolbarView: NSView {
         button.tag = tag
         button.toolTip = tooltip
         
-        let widthConstraint = button.widthAnchor.constraint(equalToConstant: 32)
+        let widthConstraint = button.widthAnchor.constraint(equalToConstant: toolButtonSize)
         widthConstraint.priority = NSLayoutConstraint.Priority(999)
         widthConstraint.isActive = true
         
-        let heightConstraint = button.heightAnchor.constraint(equalToConstant: 32)
+        let heightConstraint = button.heightAnchor.constraint(equalToConstant: toolButtonSize)
         heightConstraint.priority = NSLayoutConstraint.Priority(999)
         heightConstraint.isActive = true
         
@@ -235,11 +236,11 @@ final class EditorToolbarView: NSView {
         button.setAccessibilityLabel(tooltip)
         button.alignment = .center
         button.font = DesignTokens.Typography.bodyMedium()
-        let widthConstraint = button.widthAnchor.constraint(equalToConstant: 32)
+        let widthConstraint = button.widthAnchor.constraint(equalToConstant: toolButtonSize)
         widthConstraint.priority = NSLayoutConstraint.Priority(999)
         widthConstraint.isActive = true
         
-        let heightConstraint = button.heightAnchor.constraint(equalToConstant: 32)
+        let heightConstraint = button.heightAnchor.constraint(equalToConstant: toolButtonSize)
         heightConstraint.priority = NSLayoutConstraint.Priority(999)
         heightConstraint.isActive = true
         return button
@@ -252,7 +253,7 @@ final class EditorToolbarView: NSView {
         widthConstraint.priority = NSLayoutConstraint.Priority(999)
         widthConstraint.isActive = true
         
-        let heightConstraint = separator.heightAnchor.constraint(equalToConstant: 16)
+        let heightConstraint = separator.heightAnchor.constraint(equalToConstant: 14)
         heightConstraint.priority = NSLayoutConstraint.Priority(999)
         heightConstraint.isActive = true
         return separator

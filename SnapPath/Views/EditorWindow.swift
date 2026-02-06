@@ -1,5 +1,10 @@
 import Cocoa
 
+private final class EditorToolbarPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
 final class EditorWindow: NSWindow, NSWindowDelegate {
 
     private let originalImage: CGImage
@@ -7,11 +12,15 @@ final class EditorWindow: NSWindow, NSWindowDelegate {
     private let onCopyPath: (CGImage) -> Void
     private let onCancel: () -> Void
     private let sourceScreen: NSScreen?
+    private let imageSizeInPoints: NSSize
+    private let pixelsPerPoint: CGFloat
 
     private var toolbarView: EditorToolbarView!
+    private var toolbarWindow: EditorToolbarPanel?
+    private var imageView: NSImageView!
     private var canvasView: EditorCanvasView!
-    private var scrollView: NSScrollView!
-    private let toolbarHeight: CGFloat = 44
+    private let toolbarHeight: CGFloat = 38
+    private let toolbarOutsideGap: CGFloat = 0
 
     init(image: CGImage, sourceScreen: NSScreen? = nil, onCopyImage: @escaping (CGImage) -> Void, onCopyPath: @escaping (CGImage) -> Void, onCancel: @escaping () -> Void) {
         self.originalImage = image
@@ -32,8 +41,10 @@ final class EditorWindow: NSWindow, NSWindowDelegate {
         // Convert pixel dimensions to points for proper display
         let imageWidthInPoints = CGFloat(image.width) / scaleFactor
         let imageHeightInPoints = CGFloat(image.height) / scaleFactor
+        self.imageSizeInPoints = NSSize(width: imageWidthInPoints, height: imageHeightInPoints)
+        self.pixelsPerPoint = scaleFactor
 
-        // Window size = image size in points (toolbar overlays)
+        // Window size = image size
         var contentWidth = imageWidthInPoints
         var contentHeight = imageHeightInPoints
 
@@ -89,47 +100,170 @@ final class EditorWindow: NSWindow, NSWindowDelegate {
     private func setupUI() {
         guard let contentView = self.contentView else { return }
 
-        // Scroll view for canvas (fill entire window)
-        scrollView = NSScrollView(frame: .zero)
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.backgroundColor = .darkGray
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(scrollView)
+        let containerView = NSView(frame: .zero)
+        containerView.wantsLayer = true
+        containerView.layer?.backgroundColor = NSColor.darkGray.cgColor
+        containerView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(containerView)
 
-        // Canvas
-        canvasView = EditorCanvasView(image: originalImage)
-        canvasView.delegate = self
-        scrollView.documentView = canvasView
-
-        // Enable magnification for zoom
-        scrollView.allowsMagnification = true
-        scrollView.minMagnification = 0.1
-        scrollView.maxMagnification = 4.0
-
-        // Toolbar (floating at bottom)
+        // Toolbar (outside the editor window, attached below)
         toolbarView = EditorToolbarView(frame: .zero)
         toolbarView.delegate = self
-        toolbarView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(toolbarView, positioned: .above, relativeTo: scrollView)
+
+        let nsImage = NSImage(cgImage: originalImage, size: imageSizeInPoints)
+        imageView = NSImageView(frame: .zero)
+        imageView.image = nsImage
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.imageAlignment = .alignCenter
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(imageView)
+
+        // Canvas (overlay)
+        canvasView = EditorCanvasView(image: originalImage, pixelsPerPoint: pixelsPerPoint)
+        canvasView.delegate = self
+        canvasView.translatesAutoresizingMaskIntoConstraints = false
+        containerView.addSubview(canvasView)
 
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            containerView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            containerView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            containerView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            containerView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
 
-            toolbarView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            toolbarView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -DesignTokens.Spacing.l),
-            toolbarView.heightAnchor.constraint(equalToConstant: toolbarHeight)
+            imageView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            imageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            imageView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+
+            canvasView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            canvasView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            canvasView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            canvasView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
         ])
 
+        setupToolbarWindow()
         updateUndoState()
+    }
+
+    private func setupToolbarWindow() {
+        teardownToolbarWindow()
+
+        let fittingWidth = max(toolbarView.fittingSize.width, 1)
+        let panelFrame = NSRect(x: 0, y: 0, width: fittingWidth, height: toolbarHeight)
+        let panel = EditorToolbarPanel(
+            contentRect: panelFrame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.isMovable = false
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.level = self.level
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        panel.isExcludedFromWindowsMenu = true
+
+        let panelContentView = NSView(frame: NSRect(origin: .zero, size: panelFrame.size))
+        panel.contentView = panelContentView
+
+        toolbarView.translatesAutoresizingMaskIntoConstraints = false
+        panelContentView.addSubview(toolbarView)
+        NSLayoutConstraint.activate([
+            toolbarView.leadingAnchor.constraint(equalTo: panelContentView.leadingAnchor),
+            toolbarView.trailingAnchor.constraint(equalTo: panelContentView.trailingAnchor),
+            toolbarView.topAnchor.constraint(equalTo: panelContentView.topAnchor),
+            toolbarView.bottomAnchor.constraint(equalTo: panelContentView.bottomAnchor)
+        ])
+
+        toolbarWindow = panel
+        addChildWindow(panel, ordered: .above)
+        updateToolbarWindowFrame()
+        panel.orderFront(nil)
+    }
+
+    private func updateToolbarWindowFrame() {
+        guard let toolbarWindow else { return }
+
+        let width = max(toolbarView.fittingSize.width, 1)
+        let height = toolbarHeight
+        let parentFrame = frame
+        let visibleFrame = preferredVisibleFrameForToolbar()
+
+        let preferredX = parentFrame.midX - (width / 2)
+        let minX = visibleFrame.minX
+        let maxX = max(minX, visibleFrame.maxX - width)
+        let x = min(max(preferredX, minX), maxX)
+
+        let preferredBelowY = parentFrame.minY - height - toolbarOutsideGap
+        let preferredAboveY = parentFrame.maxY + toolbarOutsideGap
+
+        let hasRoomBelow = preferredBelowY >= visibleFrame.minY
+        let hasRoomAbove = preferredAboveY + height <= visibleFrame.maxY
+
+        let y: CGFloat
+        if hasRoomBelow {
+            y = preferredBelowY
+        } else if hasRoomAbove {
+            y = preferredAboveY
+        } else {
+            y = min(max(preferredBelowY, visibleFrame.minY), visibleFrame.maxY - height)
+        }
+
+        let nextFrame = NSRect(x: x, y: y, width: width, height: height)
+        toolbarWindow.setFrame(nextFrame, display: false)
+    }
+
+    private func preferredVisibleFrameForToolbar() -> NSRect {
+        if let currentScreen = screen {
+            return currentScreen.visibleFrame
+        }
+        if let sourceScreen {
+            return sourceScreen.visibleFrame
+        }
+        if let mainScreen = NSScreen.main {
+            return mainScreen.visibleFrame
+        }
+        return ScreenCoordinateHelper.allScreensUnionFrame()
+    }
+
+    private func teardownToolbarWindow() {
+        guard let toolbarWindow else { return }
+
+        removeChildWindow(toolbarWindow)
+        toolbarWindow.orderOut(nil)
+        self.toolbarWindow = nil
     }
 
     private func updateUndoState() {
         toolbarView.setUndoEnabled(canvasView.canUndo)
+    }
+}
+
+// MARK: - NSWindowDelegate
+
+extension EditorWindow {
+    func windowDidMove(_ notification: Notification) {
+        updateToolbarWindowFrame()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        updateToolbarWindowFrame()
+    }
+
+    func windowDidMiniaturize(_ notification: Notification) {
+        toolbarWindow?.orderOut(nil)
+    }
+
+    func windowDidDeminiaturize(_ notification: Notification) {
+        updateToolbarWindowFrame()
+        toolbarWindow?.orderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        teardownToolbarWindow()
     }
 }
 
@@ -142,14 +276,17 @@ extension EditorWindow: EditorToolbarViewDelegate {
         if tool != .crop {
             canvasView.clearCrop()
         }
+        focusEditorWindowForCanvasInput()
     }
 
     func toolbarDidSelectColor(_ color: NSColor) {
         canvasView.currentColor = color
+        focusEditorWindowForCanvasInput()
     }
 
     func toolbarDidChangeFontSize(_ size: CGFloat) {
         canvasView.currentFontSize = size
+        focusEditorWindowForCanvasInput()
     }
 
     func toolbarDidTapUndo() {
@@ -223,6 +360,11 @@ extension EditorWindow: EditorToolbarViewDelegate {
         alert.messageText = "editor.renderError".localized
         alert.alertStyle = .critical
         alert.runModal()
+    }
+
+    private func focusEditorWindowForCanvasInput() {
+        makeKeyAndOrderFront(nil)
+        orderFrontRegardless()
     }
 }
 

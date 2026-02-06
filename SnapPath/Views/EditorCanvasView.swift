@@ -12,6 +12,10 @@ final class EditorCanvasView: NSView {
     // MARK: - Properties
 
     private let originalImage: CGImage
+    private let imagePixelsPerPoint: CGFloat
+    private let imagePixelSize: CGSize
+    private let imageSizeInPoints: CGSize
+
     private var annotations: [Annotation] = []
     private var undoStack: [[Annotation]] = []
     private var cropRect: CropRect?
@@ -21,24 +25,31 @@ final class EditorCanvasView: NSView {
     var currentLineWidth: CGFloat = 3
     var currentFontSize: CGFloat = 24
 
-    // Drag state
+    // Drag state (in image pixel coordinates)
     private var dragStart: CGPoint?
     private var dragCurrent: CGPoint?
     private var isDrawing = false
 
     // Text input
     private var textEditingView: TextEditingView?
-    private var editingAnnotationIndex: Int?  // Index of annotation being re-edited
+    private var editingAnnotationIndex: Int?
+    private var textEditingOriginInPixels: CGPoint?
+    private var textEditingFontSizeInPixels: CGFloat?
 
     // MARK: - Init
 
-    init(image: CGImage) {
+    init(image: CGImage, pixelsPerPoint: CGFloat = NSScreen.main?.backingScaleFactor ?? 2.0) {
         self.originalImage = image
-        // Use points instead of pixels for proper Retina display
-        let scaleFactor = NSScreen.main?.backingScaleFactor ?? 2.0
-        let widthInPoints = CGFloat(image.width) / scaleFactor
-        let heightInPoints = CGFloat(image.height) / scaleFactor
-        super.init(frame: NSRect(x: 0, y: 0, width: widthInPoints, height: heightInPoints))
+        self.imagePixelsPerPoint = max(1, pixelsPerPoint)
+        self.imagePixelSize = CGSize(width: CGFloat(image.width), height: CGFloat(image.height))
+        self.imageSizeInPoints = CGSize(
+            width: imagePixelSize.width / self.imagePixelsPerPoint,
+            height: imagePixelSize.height / self.imagePixelsPerPoint
+        )
+        super.init(frame: .zero)
+
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     required init?(coder: NSCoder) {
@@ -49,23 +60,19 @@ final class EditorCanvasView: NSView {
 
     override var isFlipped: Bool { true }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
 
         guard let context = NSGraphicsContext.current?.cgContext else { return }
 
-        // Draw original image (fill the entire view bounds)
-        let imageRect = self.bounds
-        context.saveGState()
-        context.translateBy(x: 0, y: bounds.height)
-        context.scaleBy(x: 1, y: -1)
-        context.draw(originalImage, in: imageRect)
-        context.restoreGState()
-
         // Draw existing annotations (skip the one being edited)
         for (index, annotation) in annotations.enumerated() {
             if index == editingAnnotationIndex {
-                continue  // Don't draw annotation currently being edited
+                continue
             }
             draw(annotation: annotation, in: context)
         }
@@ -74,17 +81,26 @@ final class EditorCanvasView: NSView {
         if let start = dragStart, let current = dragCurrent, isDrawing, let tool = currentTool {
             switch tool {
             case .arrow:
-                let tempAnnotation = Annotation.arrow(start: start, end: current, color: currentColor, lineWidth: currentLineWidth)
+                let tempAnnotation = Annotation.arrow(
+                    start: start,
+                    end: current,
+                    color: currentColor,
+                    lineWidth: currentLineWidthPixels()
+                )
                 draw(annotation: tempAnnotation, in: context)
 
             case .rectangle:
                 let rect = rectFromPoints(start, current)
-                let tempAnnotation = Annotation.rectangle(rect: rect, color: currentColor, lineWidth: currentLineWidth)
+                let tempAnnotation = Annotation.rectangle(
+                    rect: rect,
+                    color: currentColor,
+                    lineWidth: currentLineWidthPixels()
+                )
                 draw(annotation: tempAnnotation, in: context)
 
             case .crop:
                 let rect = rectFromPoints(start, current)
-                drawCropOverlay(rect: rect, in: context)
+                drawCropOverlay(pixelRect: rect, in: context)
 
             case .text:
                 break
@@ -93,22 +109,42 @@ final class EditorCanvasView: NSView {
 
         // Draw crop overlay if set
         if let crop = cropRect, !crop.isEmpty {
-            drawCropOverlay(rect: crop.rect, in: context)
+            drawCropOverlay(pixelRect: crop.rect, in: context)
+        }
+    }
+
+    override func layout() {
+        super.layout()
+
+        // Keep the editing view anchored to the image while resizing.
+        guard let editView = textEditingView, let originPx = textEditingOriginInPixels else { return }
+        let viewOrigin = viewPoint(fromPixelPoint: originPx)
+        if editView.frame.origin != viewOrigin {
+            editView.frame.origin = viewOrigin
         }
     }
 
     private func draw(annotation: Annotation, in context: CGContext) {
+        let pointsPerPixel = currentPointsPerPixel()
+        guard pointsPerPixel > 0 else { return }
+
         switch annotation {
-        case .arrow(let start, let end, let color, let lineWidth):
+        case .arrow(let startPx, let endPx, let color, let lineWidthPx):
+            let start = viewPoint(fromPixelPoint: startPx)
+            let end = viewPoint(fromPixelPoint: endPx)
+            let lineWidth = lineWidthPx * pointsPerPixel
             drawArrow(from: start, to: end, color: color, lineWidth: lineWidth, in: context)
 
-        case .rectangle(let rect, let color, let lineWidth):
+        case .rectangle(let rectPx, let color, let lineWidthPx):
+            let rect = viewRect(fromPixelRect: rectPx)
             context.setStrokeColor(color.cgColor)
-            context.setLineWidth(lineWidth)
+            context.setLineWidth(lineWidthPx * pointsPerPixel)
             context.addRect(rect)
             context.strokePath()
 
-        case .text(let origin, let content, let color, let fontSize):
+        case .text(let originPx, let content, let color, let fontSizePx):
+            let origin = viewPoint(fromPixelPoint: originPx)
+            let fontSize = fontSizePx * pointsPerPixel
             let font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
             let attributes: [NSAttributedString.Key: Any] = [
                 .font: font,
@@ -130,8 +166,8 @@ final class EditorCanvasView: NSView {
         context.addLine(to: end)
         context.strokePath()
 
-        // Arrowhead
-        let arrowLength: CGFloat = 15
+        // Arrowhead (scaled with stroke width)
+        let arrowLength: CGFloat = max(6, lineWidth * 5)
         let arrowAngle: CGFloat = .pi / 6
 
         let dx = end.x - start.x
@@ -154,25 +190,60 @@ final class EditorCanvasView: NSView {
         context.strokePath()
     }
 
-    private func drawCropOverlay(rect: CGRect, in context: CGContext) {
-        let bounds = self.bounds
+    private func drawCropOverlay(pixelRect: CGRect, in context: CGContext) {
+        let imageRect = imageRectInView()
+        guard !imageRect.isEmpty else { return }
 
-        // Dim outside area
+        let cropRect = viewRect(fromPixelRect: pixelRect).intersection(imageRect)
+        guard !cropRect.isEmpty else { return }
+
+        // Dim outside area (within the image rect)
         context.setFillColor(DesignTokens.Colors.cropOverlay.cgColor)
 
         // Top
-        context.fill(CGRect(x: 0, y: 0, width: bounds.width, height: rect.minY))
+        if cropRect.minY > imageRect.minY {
+            context.fill(CGRect(
+                x: imageRect.minX,
+                y: imageRect.minY,
+                width: imageRect.width,
+                height: cropRect.minY - imageRect.minY
+            ))
+        }
+
         // Bottom
-        context.fill(CGRect(x: 0, y: rect.maxY, width: bounds.width, height: bounds.height - rect.maxY))
+        if cropRect.maxY < imageRect.maxY {
+            context.fill(CGRect(
+                x: imageRect.minX,
+                y: cropRect.maxY,
+                width: imageRect.width,
+                height: imageRect.maxY - cropRect.maxY
+            ))
+        }
+
         // Left
-        context.fill(CGRect(x: 0, y: rect.minY, width: rect.minX, height: rect.height))
+        if cropRect.minX > imageRect.minX {
+            context.fill(CGRect(
+                x: imageRect.minX,
+                y: cropRect.minY,
+                width: cropRect.minX - imageRect.minX,
+                height: cropRect.height
+            ))
+        }
+
         // Right
-        context.fill(CGRect(x: rect.maxX, y: rect.minY, width: bounds.width - rect.maxX, height: rect.height))
+        if cropRect.maxX < imageRect.maxX {
+            context.fill(CGRect(
+                x: cropRect.maxX,
+                y: cropRect.minY,
+                width: imageRect.maxX - cropRect.maxX,
+                height: cropRect.height
+            ))
+        }
 
         // Draw border
         context.setStrokeColor(DesignTokens.Colors.selectionBorder.cgColor)
         context.setLineWidth(DesignTokens.Border.widthMedium)
-        context.addRect(rect)
+        context.addRect(cropRect)
         context.strokePath()
     }
 
@@ -182,6 +253,81 @@ final class EditorCanvasView: NSView {
         let w = abs(p2.x - p1.x)
         let h = abs(p2.y - p1.y)
         return CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    // MARK: - Coordinate Mapping
+
+    private func imageRectInView() -> CGRect {
+        let bounds = self.bounds
+        guard bounds.width > 0, bounds.height > 0 else { return .zero }
+        guard imagePixelSize.width > 0, imagePixelSize.height > 0 else { return .zero }
+
+        let scale = min(bounds.width / imagePixelSize.width, bounds.height / imagePixelSize.height)
+        let width = imagePixelSize.width * scale
+        let height = imagePixelSize.height * scale
+        let x = bounds.minX + (bounds.width - width) / 2
+        let y = bounds.minY + (bounds.height - height) / 2
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
+
+    private func currentPointsPerPixel() -> CGFloat {
+        let rect = imageRectInView()
+        guard rect.width > 0 else { return 0 }
+        return rect.width / imagePixelSize.width
+    }
+
+    private func currentDisplayScale() -> CGFloat {
+        let rect = imageRectInView()
+        guard imageSizeInPoints.width > 0 else { return 1 }
+        return rect.width / imageSizeInPoints.width
+    }
+
+    private func viewPoint(fromPixelPoint point: CGPoint) -> CGPoint {
+        let rect = imageRectInView()
+        guard !rect.isEmpty else { return .zero }
+
+        let nx = point.x / imagePixelSize.width
+        let ny = point.y / imagePixelSize.height
+
+        return CGPoint(
+            x: rect.minX + nx * rect.width,
+            y: rect.minY + ny * rect.height
+        )
+    }
+
+    private func viewRect(fromPixelRect rectPx: CGRect) -> CGRect {
+        let p1 = viewPoint(fromPixelPoint: CGPoint(x: rectPx.minX, y: rectPx.minY))
+        let p2 = viewPoint(fromPixelPoint: CGPoint(x: rectPx.maxX, y: rectPx.maxY))
+        return CGRect(x: p1.x, y: p1.y, width: p2.x - p1.x, height: p2.y - p1.y)
+    }
+
+    private func pixelPoint(fromViewPoint viewPoint: CGPoint, clampToImage: Bool) -> CGPoint? {
+        let rect = imageRectInView()
+        guard !rect.isEmpty else { return nil }
+
+        var point = viewPoint
+        if clampToImage {
+            point.x = min(max(point.x, rect.minX), rect.maxX)
+            point.y = min(max(point.y, rect.minY), rect.maxY)
+        } else {
+            guard rect.contains(point) else { return nil }
+        }
+
+        let nx = (point.x - rect.minX) / rect.width
+        let ny = (point.y - rect.minY) / rect.height
+
+        return CGPoint(
+            x: nx * imagePixelSize.width,
+            y: ny * imagePixelSize.height
+        )
+    }
+
+    private func currentLineWidthPixels() -> CGFloat {
+        currentLineWidth * imagePixelsPerPoint
+    }
+
+    private func currentFontSizePixels() -> CGFloat {
+        currentFontSize * imagePixelsPerPoint
     }
 
     // MARK: - Mouse Events
@@ -216,28 +362,34 @@ final class EditorCanvasView: NSView {
             return
         }
 
-        // No tool selected → view-only mode, ignore drawing
+        // No tool selected -> view-only mode, ignore drawing
         guard let tool = currentTool else { return }
 
         if tool == .text {
+            guard let pixel = pixelPoint(fromViewPoint: point, clampToImage: false) else { return }
+
             // Check if clicking on an existing text annotation for re-editing
-            if let index = textAnnotationAt(point) {
+            if let index = textAnnotationAt(pixel) {
                 startEditingAnnotation(at: index)
                 return
             }
+
             // Otherwise, start new text input
             showTextInput(at: point)
             return
         }
 
-        dragStart = point
-        dragCurrent = point
+        guard let pixel = pixelPoint(fromViewPoint: point, clampToImage: false) else { return }
+        dragStart = pixel
+        dragCurrent = pixel
         isDrawing = true
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard isDrawing, currentTool != nil else { return }
-        dragCurrent = convert(event.locationInWindow, from: nil)
+        let point = convert(event.locationInWindow, from: nil)
+        guard let pixel = pixelPoint(fromViewPoint: point, clampToImage: true) else { return }
+        dragCurrent = pixel
         needsDisplay = true
     }
 
@@ -263,10 +415,19 @@ final class EditorCanvasView: NSView {
 
         switch tool {
         case .arrow:
-            annotations.append(.arrow(start: start, end: end, color: currentColor, lineWidth: currentLineWidth))
+            annotations.append(.arrow(
+                start: start,
+                end: end,
+                color: currentColor,
+                lineWidth: currentLineWidthPixels()
+            ))
 
         case .rectangle:
-            annotations.append(.rectangle(rect: rect, color: currentColor, lineWidth: currentLineWidth))
+            annotations.append(.rectangle(
+                rect: rect,
+                color: currentColor,
+                lineWidth: currentLineWidthPixels()
+            ))
 
         case .crop:
             cropRect = CropRect(rect: rect)
@@ -284,24 +445,27 @@ final class EditorCanvasView: NSView {
     // MARK: - Text Input
 
     private func showTextInput(at point: CGPoint, initialText: String = "") {
-        textEditingView?.removeFromSuperview()
+        guard let originPx = pixelPoint(fromViewPoint: point, clampToImage: false) else { return }
 
         let editView = TextEditingView(
             origin: point,
             color: currentColor,
-            fontSize: currentFontSize,
+            fontSize: currentFontSize * currentDisplayScale(),
             initialText: initialText
         )
         editView.delegate = self
 
         addSubview(editView)
         editView.beginEditing()
+
         textEditingView = editView
+        textEditingOriginInPixels = originPx
+        textEditingFontSizeInPixels = currentFontSizePixels()
     }
 
-    private func textAnnotationAt(_ point: CGPoint) -> Int? {
+    private func textAnnotationAt(_ pixelPoint: CGPoint) -> Int? {
         for (index, annotation) in annotations.enumerated().reversed() {
-            if annotation.isText, let rect = annotation.boundingRect(), rect.contains(point) {
+            if annotation.isText, let rect = annotation.boundingRect(), rect.contains(pixelPoint) {
                 return index
             }
         }
@@ -309,23 +473,27 @@ final class EditorCanvasView: NSView {
     }
 
     private func startEditingAnnotation(at index: Int) {
-        guard case .text(let origin, let content, let color, let fontSize) = annotations[index] else { return }
+        guard case .text(let originPx, let content, let color, let fontSizePx) = annotations[index] else { return }
 
         // Store the index for later update
         editingAnnotationIndex = index
 
         // Create editing view with existing content
+        let viewOrigin = viewPoint(fromPixelPoint: originPx)
         let editView = TextEditingView(
-            origin: origin,
+            origin: viewOrigin,
             color: color,
-            fontSize: fontSize,
+            fontSize: fontSizePx * currentPointsPerPixel(),
             initialText: content
         )
         editView.delegate = self
 
         addSubview(editView)
         editView.beginEditing()
+
         textEditingView = editView
+        textEditingOriginInPixels = originPx
+        textEditingFontSizeInPixels = fontSizePx
 
         // Redraw to hide the annotation being edited
         needsDisplay = true
@@ -339,11 +507,13 @@ final class EditorCanvasView: NSView {
         if !trimmedText.isEmpty {
             pushUndo()
 
+            let originPx = textEditingOriginInPixels ?? pixelPoint(fromViewPoint: editView.textOrigin, clampToImage: true) ?? .zero
+            let fontSizePx = textEditingFontSizeInPixels ?? currentFontSizePixels()
             let newAnnotation = Annotation.text(
-                origin: editView.textOrigin,
+                origin: originPx,
                 content: editView.text,
                 color: editView.textColor,
-                fontSize: editView.fontSize
+                fontSize: fontSizePx
             )
 
             if let editingIndex = editingAnnotationIndex {
@@ -365,6 +535,8 @@ final class EditorCanvasView: NSView {
         editView.removeFromSuperview()
         textEditingView = nil
         editingAnnotationIndex = nil
+        textEditingOriginInPixels = nil
+        textEditingFontSizeInPixels = nil
         needsDisplay = true
     }
 
@@ -372,23 +544,9 @@ final class EditorCanvasView: NSView {
         textEditingView?.removeFromSuperview()
         textEditingView = nil
         editingAnnotationIndex = nil
+        textEditingOriginInPixels = nil
+        textEditingFontSizeInPixels = nil
         needsDisplay = true
-    }
-
-    @objc private func textInputDidEnd(_ sender: NSTextField) {
-        guard !sender.stringValue.isEmpty else {
-            sender.removeFromSuperview()
-            return
-        }
-
-        pushUndo()
-
-        let origin = sender.frame.origin
-        annotations.append(.text(origin: origin, content: sender.stringValue, color: currentColor, fontSize: currentFontSize))
-
-        sender.removeFromSuperview()
-        needsDisplay = true
-        delegate?.canvasDidUpdateAnnotations()
     }
 
     // MARK: - Undo

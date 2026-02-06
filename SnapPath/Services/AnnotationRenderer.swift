@@ -76,7 +76,8 @@ final class AnnotationRenderer {
         context.strokePath()
 
         // Draw arrowhead
-        let arrowLength: CGFloat = 15
+        // Keep arrowhead proportional to the stroke width so it looks consistent across scales.
+        let arrowLength: CGFloat = max(6, lineWidth * 5)
         let arrowAngle: CGFloat = .pi / 6
 
         let dx = end.x - start.x
