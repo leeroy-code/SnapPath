@@ -44,6 +44,7 @@
   - **保存并复制路径**：右键菜单 "Save & Copy Path" 保存文件并复制路径
   - **关闭**：按 `ESC`、双击窗口或右键菜单 "Close"
 - 适合需要参考某个区域内容时使用
+- 点击窗口右上角的绿色 Pin 图标也可快速关闭窗口
 
 ## 截图编辑器
 
@@ -60,16 +61,26 @@
 | 文字 (Text) | 添加文字标注，点击已有文字可重新编辑 |
 | 裁剪 (Crop) | 裁剪图片，仅保留选中区域 |
 
+### OCR 文字识别
+
+编辑器提供 OCR 功能，可识别截图中的文字内容：
+
+- 点击工具栏的 OCR 按钮（文字识别图标）
+- 自动识别图片中的文字（支持中英文）
+- 识别结果自动复制到剪贴板
+- 识别成功后自动关闭编辑器窗口
+
 ### 编辑器功能
 
 - **颜色选择**：点击颜色选择器更改标注颜色
-- **字体大小**：下拉菜单选择文字标注的字号（12pt - 72pt）
-- **撤销**：撤销上一步操作（支持多步撤销）
-- **缩放**：滑块或按钮调整画布缩放（10% - 400%），支持"适应窗口"按钮
-- **取消**：放弃编辑，按 `ESC` 或点击 "Cancel"
-- **复制图片**：仅复制图片到剪贴板（不保存文件）
-- **复制路径**：保存文件并复制路径到剪贴板（按 `Enter` 快捷确认）
+- **字体大小**：下拉菜单选择文字标注的字号（12pt - 48pt）
+- **撤销**：撤销上一步操作（支持多步撤销），快捷键 `⌘Z`
+- **缩放**：使用触控板双指缩放或鼠标滚轮调整画布缩放（10% - 400%）
+- **取消**：放弃编辑，按 `ESC` 或 `⌘W` 或点击 "Cancel"
+- **复制图片**：仅复制图片到剪贴板（不保存文件），快捷键 `⌘C` 或 `Enter`
+- **复制路径**：保存文件并复制路径到剪贴板，快捷键 `⌘S`
 - **钉住**：将编辑后的图片作为浮动窗口钉住
+- **OCR**：识别图片中的文字并复制到剪贴板
 
 ## 截图后的行为
 
@@ -88,10 +99,20 @@
 | 全屏截图 | `⌘⇧A` (Command + Shift + A) |
 | 窗口截图 | `⌘⇧W` (Command + Shift + W) |
 | Pin 截图 | `⌘⇧P` (Command + Shift + P) |
+| 复制 Finder 路径 | `⌘⇧C` (Command + Shift + C) |
 
 快捷键为全局快捷键，在任何应用中均可触发。
 
+**复制 Finder 路径**：在 Finder 中选中文件后按下 `⌘⇧C`，即可将选中文件的绝对路径复制到剪贴板。支持多选文件，多个路径会以换行分隔。
+
 **自定义快捷键**：打开设置窗口（菜单栏图标 → Settings...），在 Keyboard Shortcuts 区域点击录制按钮，按下新的快捷键组合即可。
+
+支持自定义的快捷键：
+- Region Capture（区域截图）
+- Full Screen Capture（全屏截图）
+- Window Capture（窗口截图）
+- Pin Region（钉住区域）
+- Copy Finder Path（复制 Finder 路径）
 
 ## 设置
 
@@ -104,6 +125,8 @@
 | Play sound effect | 截图成功后播放提示音 | 开启 |
 | Show notification | 截图成功后显示系统通知 | 开启 |
 | Show editor after capture | 截图后自动打开编辑器 | 开启 |
+| Auto check for updates | 自动检查应用更新 | 开启 |
+| Language | 界面语言（English / 中文）| English |
 
 ## 菜单栏菜单
 
@@ -113,17 +136,27 @@
 Region Capture
 Full Screen Capture
 Window Capture
+─────────────────
 Pin Region
 ─────────────────
-Close All Pins
+Copy Finder Path
+─────────────────
 Open Screenshots Folder
 ─────────────────
 Settings...          ⌘,
+Check for Updates
 ─────────────────
+About SnapPath
 Quit SnapPath        ⌘Q
 ```
 
-"Open Screenshots Folder" 在 Finder 中打开当前截图保存目录。
+**Copy Finder Path**：复制 Finder 中当前选中的文件路径到剪贴板。
+
+**Open Screenshots Folder**：在 Finder 中打开当前截图保存目录。
+
+**Check for Updates**：手动检查应用更新。
+
+**About SnapPath**：显示应用版本和版权信息。
 
 ---
 

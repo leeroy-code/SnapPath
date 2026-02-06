@@ -1,0 +1,39 @@
+# SnapPath - Cursor Rules
+
+> See `CLAUDE.md` for complete project documentation.
+
+## Project Context
+
+macOS menu bar screenshot utility (SwiftUI). Captures screenshots and copies file paths to clipboard.
+
+## Build Commands
+
+```bash
+# Build
+xcodebuild -project SnapPath.xcodeproj -scheme SnapPath -configuration Debug build
+```
+
+## Architecture Notes
+
+- Service-oriented architecture
+- No App Sandbox (required for screen capture)
+- Menu bar only app (no Dock icon)
+- Uses `KeyboardShortcuts` and `LaunchAtLogin` packages
+
+## Code Style
+
+- Swift 5.0
+- SwiftUI for UI
+- `@AppStorage` for settings persistence
+- Services in `Services/` folder, Views in `Views/` folder
+
+## Important Files
+
+- `SnapPathApp.swift` - Entry point
+- `Services/HotkeyService.swift` - Global shortcuts
+- `Models/AppSettings.swift` - Settings
+- `Info.plist` - Must include `NSScreenCaptureUsageDescription`
+
+## Before Modifying
+
+Always check `CLAUDE.md` and `doc/architecture.md` for detailed guidance.
